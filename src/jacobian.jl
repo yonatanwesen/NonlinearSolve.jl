@@ -130,10 +130,10 @@ __init_JᵀJ(J::StaticArray) = MArray{Tuple{size(J, 2), size(J, 2)}, eltype(J)}(
 __init_inexactJ(J::Number, alpha::AbstractFloat) = zero(J) - (1 / alpha) * I
 function __init_inexactJ(J::Union{AbstractArray, AbstractSciMLOperator},
     alpha::AbstractFloat)
-    J - (1 / alpha) * I
+    return J - (1 / alpha) * I
 end
 function __init_inexactJ(J::StaticArray, alpha::AbstractFloat)
-    MArray{Tuple{size(J, 2), size(J, 2)}, eltype(J)}(undef)
+    return MArray{Tuple{size(J, 2), size(J, 2)}, eltype(J)}(undef)
 end
 
 __maybe_symmetric(x) = Symmetric(x)
