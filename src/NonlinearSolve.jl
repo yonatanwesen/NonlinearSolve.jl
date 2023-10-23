@@ -17,7 +17,8 @@ import LinearSolve: ComposePreconditioner, InvPreconditioner, needs_concrete_A
 import RecursiveArrayTools: ArrayPartition,
     AbstractVectorOfArray, recursivecopy!, recursivefill!
 import Reexport: @reexport
-import SciMLBase: AbstractNonlinearAlgorithm, NLStats, _unwrap_val, has_jac, isinplace
+import SciMLBase: AbstractNonlinearAlgorithm,
+    AbstractSciMLOperator, NLStats, _unwrap_val, has_jac, isinplace
 import StaticArraysCore: StaticArray, SVector, SArray, MArray
 import UnPack: @unpack
 

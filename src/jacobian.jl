@@ -51,7 +51,8 @@ jacobian!!(::Number, cache) = last(value_derivative(cache.uf, cache.u))
 # Build Jacobian Caches
 function jacobian_caches(alg::AbstractNonlinearSolveAlgorithm, f, u, p, ::Val{iip};
     linsolve_kwargs = (;),
-    linsolve_with_JᵀJ::Val{needsJᵀJ} = Val(false)) where {iip, needsJᵀJ}
+    linsolve_with_JᵀJ::Val{needsJᵀJ} = Val(false),
+    linsolve_with_PTJ::Val{inexactJ} = Val(false)) where {iip, needsJᵀJ, inexactJ}
     uf = JacobianWrapper{iip}(f, p)
 
     haslinsolve = hasfield(typeof(alg), :linsolve)
@@ -95,14 +96,13 @@ function jacobian_caches(alg::AbstractNonlinearSolveAlgorithm, f, u, p, ::Val{ii
         Jᵀfu = J' * _vec(fu)
     end
 
-    linprob = LinearProblem(needsJᵀJ ? __maybe_symmetric(JᵀJ) : J,
-        needsJᵀJ ? _vec(Jᵀfu) : _vec(fu); u0 = _vec(du))
-
-    if alg isa PseudoTransient
+    if inexactJ
         alpha = convert(eltype(u), alg.alpha_initial)
-        J_new = J - (1 / alpha) * I
-        linprob = LinearProblem(J_new, _vec(fu); u0 = _vec(du))
+        J_inexact = __init_inexactJ(J, alpha)
     end
+
+    linprob = LinearProblem(needsJᵀJ ? __maybe_symmetric(JᵀJ) : (inexactJ ? J_inexact : J),
+        needsJᵀJ ? _vec(Jᵀfu) : _vec(fu); u0 = _vec(du))
 
     weight = similar(u)
     recursivefill!(weight, true)
@@ -113,6 +113,7 @@ function jacobian_caches(alg::AbstractNonlinearSolveAlgorithm, f, u, p, ::Val{ii
         linsolve_kwargs...)
 
     needsJᵀJ && return uf, linsolve, J, fu, jac_cache, du, JᵀJ, Jᵀfu
+    inexactJ && return uf, linsolve, J, fu, jac_cache, du, J_inexact
     return uf, linsolve, J, fu, jac_cache, du
 end
 
@@ -124,6 +125,16 @@ __get_nonsparse_ad(ad) = ad
 __init_JᵀJ(J::Number) = zero(J)
 __init_JᵀJ(J::AbstractArray) = J' * J
 __init_JᵀJ(J::StaticArray) = MArray{Tuple{size(J, 2), size(J, 2)}, eltype(J)}(undef)
+
+#init J - 1/alpha * I
+__init_inexactJ(J::Number, alpha::AbstractFloat) = zero(J) - (1 / alpha) * I
+function __init_inexactJ(J::Union{AbstractArray, AbstractSciMLOperator},
+    alpha::AbstractFloat)
+    J - (1 / alpha) * I
+end
+function __init_inexactJ(J::StaticArray, alpha::AbstractFloat)
+    MArray{Tuple{size(J, 2), size(J, 2)}, eltype(J)}(undef)
+end
 
 __maybe_symmetric(x) = Symmetric(x)
 __maybe_symmetric(x::Number) = x

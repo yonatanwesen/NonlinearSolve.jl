@@ -65,6 +65,7 @@ end
     uf
     linsolve
     J
+    J_inexact
     jac_cache
     force_stop
     maxiters::Int
@@ -92,28 +93,29 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
     else
         fu1 = _mutable(f(u, p))
     end
-    uf, linsolve, J, fu2, jac_cache, du = jacobian_caches(alg,
+    uf, linsolve, J, fu2, jac_cache, du, J_inexact = jacobian_caches(alg,
         f,
         u,
         p,
         Val(iip);
-        linsolve_kwargs)
+        linsolve_kwargs,
+        linsolve_with_PTJ = Val(true))
     alpha = convert(eltype(u), alg.alpha_initial)
     res_norm = internalnorm(fu1)
 
     return PseudoTransientCache{iip}(f, alg, u, fu1, fu2, du, p, alpha, res_norm, uf,
-        linsolve, J,
+        linsolve, J, J_inexact,
         jac_cache, false, maxiters, internalnorm, ReturnCode.Default, abstol, prob,
         NLStats(1, 0, 0, 0, 0))
 end
 
 function perform_step!(cache::PseudoTransientCache{true})
-    @unpack u, fu1, f, p, alg, J, linsolve, du, alpha = cache
+    @unpack u, fu1, f, p, alg, J, J_inexact, linsolve, du, alpha = cache
     jacobian!!(J, cache)
-    J_new = J - (1 / alpha) * I
+    J_inexact = J - (1 / alpha) * I
 
     # u = u - J \ fu
-    linres = dolinsolve(alg.precs, linsolve; A = J_new, b = _vec(fu1), linu = _vec(du),
+    linres = dolinsolve(alg.precs, linsolve; A = J_inexact, b = _vec(fu1), linu = _vec(du),
         p, reltol = cache.abstol)
     cache.linsolve = linres.cache
     @. u = u - du
@@ -135,11 +137,12 @@ function perform_step!(cache::PseudoTransientCache{false})
     @unpack u, fu1, f, p, alg, linsolve, alpha = cache
 
     cache.J = jacobian!!(cache.J, cache)
+    cache.J_inexact = cache.J - (1 / alpha) * I
     # u = u - J \ fu
     if linsolve === nothing
-        cache.du = fu1 / (cache.J - (1 / alpha) * I)
+        cache.du = fu1 / (cache.J_inexact)
     else
-        linres = dolinsolve(alg.precs, linsolve; A = cache.J - (1 / alpha) * I,
+        linres = dolinsolve(alg.precs, linsolve; A = cache.J_inexact,
             b = _vec(fu1),
             linu = _vec(cache.du), p, reltol = cache.abstol)
         cache.linsolve = linres.cache
