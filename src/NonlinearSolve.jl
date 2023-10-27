@@ -5,6 +5,7 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
 end
 
 using DiffEqBase, LinearAlgebra, LinearSolve, SparseArrays, SparseDiffTools
+using FastBroadcast: @.., True, False
 import ArrayInterface: restructure
 import ForwardDiff
 
@@ -20,6 +21,7 @@ import Reexport: @reexport
 import SciMLBase: AbstractNonlinearAlgorithm, NLStats, _unwrap_val, has_jac, isinplace
 import StaticArraysCore: StaticArray, SVector, SArray, MArray
 import UnPack: @unpack
+import DiffEqBase:calculate_residuals!
 
 @reexport using ADTypes, LineSearches, SciMLBase, SimpleNonlinearSolve
 
@@ -68,8 +70,10 @@ include("trustRegion.jl")
 include("levenberg.jl")
 include("gaussnewton.jl")
 include("dfsane.jl")
+#include("pt_controller.jl")
 include("pseudotransient.jl")
 include("jacobian.jl")
+#include("pt_controller.jl")
 include("ad.jl")
 include("default.jl")
 

@@ -41,6 +41,16 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     alpha_initial
 end
 
+@concrete mutable struct IController{QT} 
+    qmin::QT
+    qmax::QT
+    qsteady_min::QT
+    qsteady_max::QT
+    gamma::QT
+    qold::QT
+
+end
+
 #concrete_jac(::PseudoTransient{CJ}) where {CJ} = CJ
 function set_ad(alg::PseudoTransient{CJ}, ad) where {CJ}
     return PseudoTransient{CJ}(ad, alg.linsolve, alg.precs, alg.alpha_initial)
@@ -56,11 +66,17 @@ end
     f
     alg
     u
+    uprev
+    uprev2
+    atmp
+    tmp
     fu1
     fu2
     du
     p
     alpha
+    alpha_prev
+    EEst
     res_norm
     uf
     linsolve
@@ -73,9 +89,12 @@ end
     abstol
     prob
     stats::NLStats
+    controller::IController
 end
 
 isinplace(::PseudoTransientCache{iip}) where {iip} = iip
+
+include("pt_controller.jl")
 
 function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransient,
     args...;
@@ -86,6 +105,8 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
 
     @unpack f, u0, p = prob
     u = alias_u0 ? u0 : deepcopy(u0)
+    uprev,uprev2 = deepcopy(u0),deepcopy(u0)
+
     if iip
         fu1 = f.resid_prototype === nothing ? zero(u) : f.resid_prototype
         f(fu1, u, p)
@@ -99,16 +120,22 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
         Val(iip);
         linsolve_kwargs)
     alpha = convert(eltype(u), alg.alpha_initial)
+    alpha_prev = alpha
     res_norm = internalnorm(fu1)
+    controller = IController()
+    EEst = eltype(controller.qmin)(1)
+    atmp = similar(u)
+    tmp = zero(u)
+    recursivefill!(atmp,false)
 
-    return PseudoTransientCache{iip}(f, alg, u, fu1, fu2, du, p, alpha, res_norm, uf,
+    return PseudoTransientCache{iip}(f, alg, u,uprev,uprev2, atmp,tmp,fu1, fu2, du, p, alpha,alpha_prev,EEst, res_norm, uf,
         linsolve, J,
         jac_cache, false, maxiters, internalnorm, ReturnCode.Default, abstol, prob,
-        NLStats(1, 0, 0, 0, 0))
+        NLStats(1, 0, 0, 0, 0),controller)
 end
 
 function perform_step!(cache::PseudoTransientCache{true})
-    @unpack u, fu1, f, p, alg, J, linsolve, du, alpha = cache
+    @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,alpha_prev,uprev,uprev2,tmp = cache
     jacobian!!(J, cache)
     J_new = J - (1 / alpha) * I
 
@@ -116,11 +143,23 @@ function perform_step!(cache::PseudoTransientCache{true})
     linres = dolinsolve(alg.precs, linsolve; A = J_new, b = _vec(fu1), linu = _vec(du),
         p, reltol = cache.abstol)
     cache.linsolve = linres.cache
+    #uprev = recursivecopy(u)
+    tmp .= uprev
     @. u = u - du
     f(fu1, u, p)
 
+    update_EEst!(cache)
+    update_alpha!(cache,cache.controller)
+
+    @. uprev2 = uprev
+    @. uprev = u
+    
+    cache.alpha_prev = cache.alpha
+    
+
+
     new_norm = cache.internalnorm(fu1)
-    cache.alpha *= cache.res_norm / new_norm
+    #cache.alpha *= cache.res_norm / new_norm
     cache.res_norm = new_norm
 
     new_norm < cache.abstol && (cache.force_stop = true)
