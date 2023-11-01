@@ -40,7 +40,7 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     precs
     alpha_initial
 end
-
+#alpha_contain = []
 @concrete mutable struct IController{QT} 
     qmin::QT
     qmax::QT
@@ -127,6 +127,7 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
     atmp = similar(u)
     tmp = zero(u)
     recursivefill!(atmp,false)
+    #global alpha_contain = []
 
     return PseudoTransientCache{iip}(f, alg, u,uprev,uprev2, atmp,tmp,fu1, fu2, du, p, alpha,alpha_prev,EEst, res_norm, uf,
         linsolve, J,
@@ -135,7 +136,7 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
 end
 
 function perform_step!(cache::PseudoTransientCache{true})
-    @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,alpha_prev,uprev,uprev2,tmp = cache
+    @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,uprev,uprev2,tmp = cache
     jacobian!!(J, cache)
     J_new = J - (1 / alpha) * I
 
@@ -147,16 +148,22 @@ function perform_step!(cache::PseudoTransientCache{true})
     tmp = uprev
     @. u = u - du
     f(fu1, u, p)
-    @info "nsteps is $(cache.stats.nsteps)"
-    @info "alpha is $(cache.alpha)"
-    @info "qold is $(cache.controller.qold)"
+    #@info "nsteps is $(cache.stats.nsteps)"
+    #@info "alpha is $(cache.alpha)"
+    #@info "qold is $(cache.controller.qold)"
+    #=if cache.stats.nsteps % 10 == 0
+        push!(alpha_contain,alpha)
+    end=#
+    
+
     update_EEst!(cache)
+    cache.alpha_prev = alpha
     update_alpha!(cache,cache.controller)
 
     @. uprev2 = uprev
     @. uprev = u
     
-    cache.alpha_prev = cache.alpha
+    
     
 
 
@@ -174,7 +181,7 @@ end
 
 function perform_step!(cache::PseudoTransientCache{false})
     @unpack u, fu1, f, p, alg, linsolve, alpha = cache
-
+    @show "fuckkkkkk"
     cache.J = jacobian!!(cache.J, cache)
     # u = u - J \ fu
     if linsolve === nothing

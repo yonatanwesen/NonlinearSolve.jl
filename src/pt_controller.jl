@@ -16,15 +16,17 @@ function update_EEst!(cache::PseudoTransientCache)
 
     alpha1 = alpha*(alpha + alpha_prev) #dt1 #alpha_prev = t - tprev
     alpha2 = alpha_prev*(alpha + alpha_prev) #dt2
+    #@show "showing alphas"
+    #@show alpha,alpha_prev,alpha1,alpha2
     c = 7/12
     r = c*alpha^2
-    @show u
-    @show uprev
-    @show uprev2
+    #@show u
+    #@show uprev
+    #@show uprev2
     
     @.. broadcast=false tmp =r * cache.internalnorm((u - uprev) / alpha1 -
                                                              (uprev - uprev2) / alpha2)
-    @info "tmp = $(tmp) in eest"
+    #@info "tmp = $(tmp) in eest"
 
     #=if cache.stats.nsteps % 10 == 0
         push!(alpha_contain,alpha)
@@ -42,7 +44,7 @@ end
 function update_alpha!(cache::PseudoTransientCache,controller::IController)
     q = stepsize_controller!(cache, controller)
     if accept_step_controller(cache,controller,q)
-        @show "accept controller"
+        #@show "accept controller"
         step_accept_controller!(cache,controller,q)
         #step_reject_controller!(cache,controller)
     else
@@ -66,8 +68,8 @@ function stepsize_controller!(cache::PseudoTransientCache,controller::IControlle
         # TODO: Shouldn't this be in `step_accept_controller!` as for the PI controller?
         controller.qold = DiffEqBase.value(cache.alpha) / q
     end
-    @info "q in step_accept_controller is $(q)"
-    @info "EEst in step_accept_controller is $(EEst)"
+    #@info "q in step_accept_controller is $(q)"
+    #@info "EEst in step_accept_controller is $(EEst)"
     return q
 end
 
