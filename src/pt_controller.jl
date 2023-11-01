@@ -1,6 +1,6 @@
 
 
-function IController(;qmin = 1//5,qmax = 10,qsteady_min = 1,qsteady_max = 1,gamma = 9 //10, qold = 1 // 10^4)
+function IController(;qmin = 0.2,qmax = 10.0,qsteady_min = 1.0,qsteady_max = 1.0,gamma = 0.9, qold = 1e-4)
     QT = eltype(qmin)
 
     return IController{QT}(qmin,QT(qmax),QT(qsteady_min),QT(qsteady_max),QT(gamma),QT(qold))
@@ -18,9 +18,13 @@ function update_EEst!(cache::PseudoTransientCache)
     alpha2 = alpha_prev*(alpha + alpha_prev) #dt2
     c = 7/12
     r = c*alpha^2
+    @show u
+    @show uprev
+    @show uprev2
     
     @.. broadcast=false tmp =r * cache.internalnorm((u - uprev) / alpha1 -
                                                              (uprev - uprev2) / alpha2)
+    @info "tmp = $(tmp) in eest"
 
     #=if cache.stats.nsteps % 10 == 0
         push!(alpha_contain,alpha)
@@ -30,15 +34,21 @@ function update_EEst!(cache::PseudoTransientCache)
 end
 
 
-function accept_step_controller(cache::PseudoTransientCache,controller::IController)
+function accept_step_controller(cache::PseudoTransientCache,controller::IController,q)
     return cache.EEst <= 1
 
 end
 
 function update_alpha!(cache::PseudoTransientCache,controller::IController)
     q = stepsize_controller!(cache, controller)
-    if accept_step_controller(cache,controller)
-        cache.alpha *= step_accept_controller!(cache,controller,q)
+    if accept_step_controller(cache,controller,q)
+        @show "accept controller"
+        step_accept_controller!(cache,controller,q)
+        #step_reject_controller!(cache,controller)
+    else
+        step_reject_controller!(cache,controller)
+        
+        #cache.alpha = step_accept_controller!(cache,controller,q)
     end
 
 end
@@ -56,6 +66,8 @@ function stepsize_controller!(cache::PseudoTransientCache,controller::IControlle
         # TODO: Shouldn't this be in `step_accept_controller!` as for the PI controller?
         controller.qold = DiffEqBase.value(cache.alpha) / q
     end
+    @info "q in step_accept_controller is $(q)"
+    @info "EEst in step_accept_controller is $(EEst)"
     return q
 end
 
@@ -65,7 +77,7 @@ function step_accept_controller!(cache, controller::IController, q)
     if qsteady_min <= q <= qsteady_max
         q = one(q)
     end
-    return cache.alpha / q # new dt
+    cache.alpha = cache.alpha / q # new dt
 end
 
 function step_reject_controller!(cache, controller::IController)

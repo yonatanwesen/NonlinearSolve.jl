@@ -144,10 +144,12 @@ function perform_step!(cache::PseudoTransientCache{true})
         p, reltol = cache.abstol)
     cache.linsolve = linres.cache
     #uprev = recursivecopy(u)
-    tmp .= uprev
+    tmp = uprev
     @. u = u - du
     f(fu1, u, p)
-
+    @info "nsteps is $(cache.stats.nsteps)"
+    @info "alpha is $(cache.alpha)"
+    @info "qold is $(cache.controller.qold)"
     update_EEst!(cache)
     update_alpha!(cache,cache.controller)
 
