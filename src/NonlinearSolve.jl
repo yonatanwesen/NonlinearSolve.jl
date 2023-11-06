@@ -10,7 +10,7 @@ import ArrayInterface: restructure
 import ForwardDiff
 
 import ADTypes: AbstractFiniteDifferencesMode
-import ArrayInterface: undefmatrix, matrix_colors, parameterless_type, ismutable
+import ArrayInterface: undefmatrix, matrix_colors, parameterless_type, ismutable,fast_scalar_indexing
 import ConcreteStructs: @concrete
 import EnumX: @enumx
 import ForwardDiff: Dual

@@ -138,10 +138,25 @@ end
 function perform_step!(cache::PseudoTransientCache{true})
     @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,uprev,uprev2,tmp = cache
     jacobian!!(J, cache)
-    J_new = J - (1 / alpha) * I
+    #J_new = J - (1 / alpha) * I
+
+    inv_alpha = inv(alpha)
+
+    if J isa SciMLBase.AbstractSciMLOperator
+        J = J - inv_alpha * I
+    else
+        idxs = diagind(J)
+        if fast_scalar_indexing(J)
+            @inbounds for i in axes(J, 1)
+                J[i, i] = J[i, i] - inv_alpha
+            end
+        else
+            @.. broadcast=false @view(J[idxs])=@view(J[idxs]) - inv_alpha
+        end
+    end
 
     # u = u - J \ fu
-    linres = dolinsolve(alg.precs, linsolve; A = J_new, b = _vec(fu1), linu = _vec(du),
+    linres = dolinsolve(alg.precs, linsolve; A = J, b = _vec(fu1), linu = _vec(du),
         p, reltol = cache.abstol)
     cache.linsolve = linres.cache
     #uprev = recursivecopy(u)
