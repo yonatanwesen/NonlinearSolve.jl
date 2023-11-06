@@ -181,7 +181,6 @@ end
 
 function perform_step!(cache::PseudoTransientCache{false})
     @unpack u, fu1, f, p, alg, linsolve, alpha = cache
-    @show "fuckkkkkk"
     cache.J = jacobian!!(cache.J, cache)
     # u = u - J \ fu
     if linsolve === nothing
