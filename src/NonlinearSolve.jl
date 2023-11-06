@@ -25,6 +25,7 @@ import PrecompileTools: @recompile_invalidations, @compile_workload, @setup_work
     import SciMLBase: AbstractNonlinearAlgorithm, NLStats, _unwrap_val, has_jac, isinplace
     import StaticArraysCore: StaticArray, SVector, SArray, MArray
     import UnPack: @unpack
+    import DiffEqBase:calculate_residuals!
 
     using ADTypes, LineSearches, SciMLBase, SimpleNonlinearSolve
 end
@@ -96,7 +97,7 @@ include("ad.jl")
 include("default.jl")
 
 @setup_workload begin
-    nlfuncs = ((NonlinearFunction{false}((u, p) -> u .* u .- p), 0.1),
+    nlfuncs = ((NonlinearFunction{false}((u, p) -> u .* u .- p), [0.1]),
         (NonlinearFunction{false}((u, p) -> u .* u .- p), [0.1]),
         (NonlinearFunction{true}((du, u, p) -> du .= u .* u .- p), [0.1]))
     probs_nls = NonlinearProblem[]

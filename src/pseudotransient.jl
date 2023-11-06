@@ -40,6 +40,17 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     alpha_initial
 end
 
+#alpha_contain = []
+@concrete mutable struct IController 
+    qmin
+    qmax
+    qsteady_min
+    qsteady_max
+    gamma
+    qold
+
+end
+
 #concrete_jac(::PseudoTransient{CJ}) where {CJ} = CJ
 function set_ad(alg::PseudoTransient{CJ}, ad) where {CJ}
     return PseudoTransient{CJ}(ad, alg.linsolve, alg.precs, alg.alpha_initial)
@@ -56,11 +67,16 @@ end
     alg
     u
     u_prev
+    u_prev2
+    atmp
+    tmp
     fu1
     fu2
     du
     p
     alpha
+    alpha_prev
+    EEst
     res_norm
     uf
     linsolve
@@ -75,7 +91,11 @@ end
     prob
     stats::NLStats
     tc_cache
+    controller::IController
 end
+
+include("pt_controller.jl")
+
 
 function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransient,
         args...; alias_u0 = false, maxiters = 1000, abstol = nothing, reltol = nothing,
@@ -85,22 +105,29 @@ function SciMLBase.__init(prob::NonlinearProblem{uType, iip}, alg_::PseudoTransi
 
     @unpack f, u0, p = prob
     u = alias_u0 ? u0 : deepcopy(u0)
+
     fu1 = evaluate_f(prob, u)
     uf, linsolve, J, fu2, jac_cache, du = jacobian_caches(alg, f, u, p, Val(iip);
         linsolve_kwargs)
     alpha = convert(eltype(u), alg.alpha_initial)
+    alpha_prev = alpha
     res_norm = internalnorm(fu1)
+    controller = IController()
+    EEst = eltype(controller.qmin)(1)
+    atmp = similar(u)
+    tmp = zero(u)
+    recursivefill!(atmp,false)
 
     abstol, reltol, tc_cache = init_termination_cache(abstol, reltol, fu1, u,
         termination_condition)
 
-    return PseudoTransientCache{iip}(f, alg, u, copy(u), fu1, fu2, du, p, alpha, res_norm,
+    return PseudoTransientCache{iip}(f, alg, u, deepcopy(u0), deepcopy(u0),atmp,tmp,fu1, fu2, du, p, alpha,alpha_prev,EEst, res_norm,
         uf, linsolve, J, jac_cache, false, maxiters, internalnorm, ReturnCode.Default,
-        abstol, reltol, prob, NLStats(1, 0, 0, 0, 0), tc_cache)
+        abstol, reltol, prob, NLStats(1, 0, 0, 0, 0), tc_cache,controller)
 end
 
 function perform_step!(cache::PseudoTransientCache{true})
-    @unpack u, u_prev, fu1, f, p, alg, J, linsolve, du, alpha = cache
+    @unpack u, u_prev,u_prev2, fu1, f, p, alg, J, linsolve, du, alpha,tmp = cache
     jacobian!!(J, cache)
 
     inv_alpha = inv(alpha)
@@ -121,15 +148,26 @@ function perform_step!(cache::PseudoTransientCache{true})
     linres = dolinsolve(alg.precs, linsolve; A = J, b = _vec(fu1), linu = _vec(du),
         p, reltol = cache.abstol)
     cache.linsolve = linres.cache
+    tmp = u_prev
     @. u = u - du
     f(fu1, u, p)
+
+    #=if cache.stats.nsteps % 10 == 0
+        push!(alpha_contain,alpha)
+    end=#
+    
+
+    update_EEst!(cache)
+    cache.alpha_prev = alpha
+    update_alpha!(cache,cache.controller)
 
     new_norm = cache.internalnorm(fu1)
     cache.alpha *= cache.res_norm / new_norm
     cache.res_norm = new_norm
 
     check_and_update!(cache, cache.fu1, cache.u, cache.u_prev)
-
+     
+    @. u_prev2 = u_prev
     @. u_prev = u
     cache.stats.nf += 1
     cache.stats.njacs += 1
@@ -139,7 +177,7 @@ function perform_step!(cache::PseudoTransientCache{true})
 end
 
 function perform_step!(cache::PseudoTransientCache{false})
-    @unpack u, u_prev, fu1, f, p, alg, linsolve, alpha = cache
+    @unpack u, u_prev,u_prev2, fu1, f, p, alg, linsolve, alpha,tmp = cache
 
     cache.J = jacobian!!(cache.J, cache)
 
@@ -153,8 +191,14 @@ function perform_step!(cache::PseudoTransientCache{false})
             linu = _vec(cache.du), p, reltol = cache.abstol)
         cache.linsolve = linres.cache
     end
+    tmp = u_prev
+
     cache.u = @. u - cache.du  # `u` might not support mutation
     cache.fu1 = f(cache.u, p)
+
+    update_EEst!(cache)
+    cache.alpha_prev = alpha
+    update_alpha!(cache,cache.controller)
 
     new_norm = cache.internalnorm(fu1)
     cache.alpha *= cache.res_norm / new_norm
@@ -162,6 +206,7 @@ function perform_step!(cache::PseudoTransientCache{false})
 
     check_and_update!(cache, cache.fu1, cache.u, cache.u_prev)
 
+    cache.u_prev2 = cache.u_prev
     cache.u_prev = cache.u
     cache.stats.nf += 1
     cache.stats.njacs += 1
