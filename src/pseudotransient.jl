@@ -39,8 +39,9 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     linsolve
     precs
     alpha_initial
+    #use_controller::Bool
 end
-#alpha_contain = []
+alpha_contain = []
 @concrete mutable struct IController{QT} 
     qmin::QT
     qmax::QT
@@ -59,6 +60,7 @@ end
 function PseudoTransient(; concrete_jac = nothing, linsolve = nothing,
     precs = DEFAULT_PRECS, alpha_initial = 1e-3, adkwargs...)
     ad = default_adargs_to_adtype(; adkwargs...)
+    #global alpha_contain = []
     return PseudoTransient{_unwrap_val(concrete_jac)}(ad, linsolve, precs, alpha_initial)
 end
 
@@ -139,6 +141,7 @@ function perform_step!(cache::PseudoTransientCache{true})
     @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,uprev,uprev2,tmp = cache
     jacobian!!(J, cache)
     #J_new = J - (1 / alpha) * I
+    
 
     inv_alpha = inv(alpha)
 
@@ -170,10 +173,10 @@ function perform_step!(cache::PseudoTransientCache{true})
         push!(alpha_contain,alpha)
     end=#
     
-
     update_EEst!(cache)
     cache.alpha_prev = alpha
     update_alpha!(cache,cache.controller)
+    
 
     @. uprev2 = uprev
     @. uprev = u
@@ -185,6 +188,9 @@ function perform_step!(cache::PseudoTransientCache{true})
     new_norm = cache.internalnorm(fu1)
     #cache.alpha *= cache.res_norm / new_norm
     cache.res_norm = new_norm
+    #@show cache.alpha
+    #@show uprev
+    #@show uprev2
 
     new_norm < cache.abstol && (cache.force_stop = true)
     cache.stats.nf += 1

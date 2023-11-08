@@ -37,7 +37,7 @@ end
 
 
 function accept_step_controller(cache::PseudoTransientCache,controller::IController,q)
-    return cache.EEst <= 1
+    return q <= 1
 
 end
 
@@ -48,6 +48,7 @@ function update_alpha!(cache::PseudoTransientCache,controller::IController)
         step_accept_controller!(cache,controller,q)
         #step_reject_controller!(cache,controller)
     else
+        #@show "reject controller"
         step_reject_controller!(cache,controller)
         
         #cache.alpha = step_accept_controller!(cache,controller,q)
