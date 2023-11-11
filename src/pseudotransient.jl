@@ -41,7 +41,7 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     alpha_initial
     #use_controller::Bool
 end
-alpha_contain = []
+#alpha_contain = []
 @concrete mutable struct IController{QT} 
     qmin::QT
     qmax::QT
@@ -140,9 +140,6 @@ end
 function perform_step!(cache::PseudoTransientCache{true})
     @unpack u, fu1, f, p, alg, J, linsolve, du, alpha,uprev,uprev2,tmp = cache
     jacobian!!(J, cache)
-    #J_new = J - (1 / alpha) * I
-    
-
     inv_alpha = inv(alpha)
 
     if J isa SciMLBase.AbstractSciMLOperator
