@@ -39,7 +39,7 @@ SIAM Journal on Scientific Computing,25, 553-569.](https://doi.org/10.1137/S1064
     linsolve
     precs
     alpha_initial
-    #use_controller::Bool
+    use_controller::Bool
 end
 #alpha_contain = []
 @concrete mutable struct IController{QT} 
@@ -54,14 +54,14 @@ end
 
 #concrete_jac(::PseudoTransient{CJ}) where {CJ} = CJ
 function set_ad(alg::PseudoTransient{CJ}, ad) where {CJ}
-    return PseudoTransient{CJ}(ad, alg.linsolve, alg.precs, alg.alpha_initial)
+    return PseudoTransient{CJ}(ad, alg.linsolve, alg.precs, alg.alpha_initial,alg.use_controller)
 end
 
 function PseudoTransient(; concrete_jac = nothing, linsolve = nothing,
-    precs = DEFAULT_PRECS, alpha_initial = 1e-3, adkwargs...)
+    precs = DEFAULT_PRECS, alpha_initial = 1e-3,use_controller = false, adkwargs...)
     ad = default_adargs_to_adtype(; adkwargs...)
     #global alpha_contain = []
-    return PseudoTransient{_unwrap_val(concrete_jac)}(ad, linsolve, precs, alpha_initial)
+    return PseudoTransient{_unwrap_val(concrete_jac)}(ad, linsolve, precs, alpha_initial,use_controller)
 end
 
 @concrete mutable struct PseudoTransientCache{iip}
@@ -169,22 +169,27 @@ function perform_step!(cache::PseudoTransientCache{true})
     #=if cache.stats.nsteps % 10 == 0
         push!(alpha_contain,alpha)
     end=#
+    new_norm = cache.internalnorm(fu1)
+    #cache.alpha *= cache.res_norm / new_norm
+
+    if !alg.use_controller
+        cache.alpha *= cache.res_norm / new_norm
+    else
+        update_EEst!(cache)
+        cache.alpha_prev = alpha
+        update_alpha!(cache,cache.controller)
+    end
     
-    update_EEst!(cache)
-    cache.alpha_prev = alpha
-    update_alpha!(cache,cache.controller)
+    
     
 
     @. uprev2 = uprev
     @. uprev = u
     
     
-    
-
-
-    new_norm = cache.internalnorm(fu1)
-    #cache.alpha *= cache.res_norm / new_norm
     cache.res_norm = new_norm
+
+    
     #@show cache.alpha
     #@show uprev
     #@show uprev2
